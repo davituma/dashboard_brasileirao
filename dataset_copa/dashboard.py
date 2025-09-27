@@ -80,7 +80,7 @@ st.plotly_chart(fig_bar_gols_ano, use_container_width=True)
 st.markdown("Este gráfico mostra a variação no total de gols marcados em cada Copa do Mundo, permitindo observar tendências ao longo do tempo, como os picos em edições específicas.")
 
 
-# --- GRÁFICO COMBINADO: BOXPLOT + BEESWARM ---
+# --- GRÁfico COMBINADO: BOXPLOT + BEESWARM ---
 with st.expander("Ver análise detalhada de Gols por Partida (Boxplot + Beeswarm)"):
     st.markdown("Este gráfico combina um Boxplot com um Beeswarm (Strip) plot. O Boxplot resume a distribuição de gols, enquanto cada ponto individual representa uma única partida, permitindo uma visualização completa da densidade e dos outliers.")
     
@@ -351,9 +351,17 @@ if pais_selecionado != "Selecione um país...":
         (df_matches['Home Team Name'] == pais_selecionado) | 
         (df_matches['Away Team Name'] == pais_selecionado)
     ].copy()
+    
+    # Obter sigla do país
+    sigla_pais = ""
+    if not df_pais.empty:
+        if pais_selecionado in df_pais['Home Team Name'].values:
+            sigla_pais = df_pais[df_pais['Home Team Name'] == pais_selecionado]['Home Team Initials'].iloc[0]
+        else:
+            sigla_pais = df_pais[df_pais['Away Team Name'] == pais_selecionado]['Away Team Initials'].iloc[0]
 
     # --- 2. RESUMO ESTATÍSTICO ---
-    st.subheader("📊 Resumo Estatístico")
+    st.subheader("📊 Resumo Estatístico Geral")
 
     # Calcular dados por copa
     participacoes_anos = df_pais['Year'].unique()
@@ -370,11 +378,13 @@ if pais_selecionado != "Selecione um país...":
     for year in participacoes_anos:
         df_copa_ano = df_pais[df_pais['Year'] == year]
         
-        gols_marcados = int(df_copa_ano[df_copa_ano['Home Team Name'] == pais_selecionado]['Home Team Goals'].sum() + \
-                        df_copa_ano[df_copa_ano['Away Team Name'] == pais_selecionado]['Away Team Goals'].sum())
+        gols_marcados_casa = df_copa_ano[df_copa_ano['Home Team Name'] == pais_selecionado]['Home Team Goals'].sum()
+        gols_marcados_fora = df_copa_ano[df_copa_ano['Away Team Name'] == pais_selecionado]['Away Team Goals'].sum()
+        gols_marcados = int(gols_marcados_casa + gols_marcados_fora)
         
-        gols_sofridos = int(df_copa_ano[df_copa_ano['Home Team Name'] == pais_selecionado]['Away Team Goals'].sum() + \
-                        df_copa_ano[df_copa_ano['Away Team Name'] == pais_selecionado]['Home Team Goals'].sum())
+        gols_sofridos_casa = df_copa_ano[df_copa_ano['Home Team Name'] == pais_selecionado]['Away Team Goals'].sum()
+        gols_sofridos_fora = df_copa_ano[df_copa_ano['Away Team Name'] == pais_selecionado]['Home Team Goals'].sum()
+        gols_sofridos = int(gols_sofridos_casa + gols_sofridos_fora)
         
         vitorias = df_copa_ano[
             ((df_copa_ano['Home Team Name'] == pais_selecionado) & (df_copa_ano['Home Team Goals'] > df_copa_ano['Away Team Goals'])) |
@@ -386,20 +396,183 @@ if pais_selecionado != "Selecione um país...":
     df_stats_por_copa = pd.DataFrame(stats_por_copa)
 
     # Cálculos das métricas
-    media_gols_marcados = df_stats_por_copa['Gols Marcados'].mean()
-    mediana_gols_sofridos = df_stats_por_copa['Gols Sofridos'].median()
+    media_gols_marcados_copa = df_stats_por_copa['Gols Marcados'].mean()
+    mediana_gols_sofridos_copa = df_stats_por_copa['Gols Sofridos'].median()
     desvio_padrao_vitorias = df_stats_por_copa['Vitórias'].std()
     
     col1, col2, col3 = st.columns(3)
     col1.metric("Copas Disputadas", copas_disputadas)
     col2.metric("Copas Vencidas", titulos)
-    col3.metric("Média de Gols Marcados/Copa", f"{media_gols_marcados:.2f}")
+    col3.metric("Média de Gols Marcados/Copa", f"{media_gols_marcados_copa:.2f}")
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Mediana de Gols Sofridos/Copa", f"{mediana_gols_sofridos:.2f}")
-    col2.metric("Desvio Padrão de Vitórias/Copa", f"{desvio_padrao_vitorias:.2f}")
+    col1.metric("Mediana de Gols Sofridos/Copa", f"{mediana_gols_sofridos_copa:.2f}")
+    valor_dsp = f"{desvio_padrao_vitorias:.2f}" if pd.notna(desvio_padrao_vitorias) else "N/A"
+    col2.metric("Desvio Padrão de Vitórias/Copa", valor_dsp)
 
+    st.markdown("---")
 
+    # --- Desempenho Médio por Partida ---
+    st.subheader("⚽ Desempenho Médio por Partida")
+    total_partidas = len(df_pais)
+    vitorias_total = ((df_pais['Home Team Name'] == pais_selecionado) & (df_pais['Home Team Goals'] > df_pais['Away Team Goals']) | (df_pais['Away Team Name'] == pais_selecionado) & (df_pais['Away Team Goals'] > df_pais['Home Team Goals'])).sum()
+    derrotas_total = ((df_pais['Home Team Name'] == pais_selecionado) & (df_pais['Home Team Goals'] < df_pais['Away Team Goals']) | (df_pais['Away Team Name'] == pais_selecionado) & (df_pais['Away Team Goals'] < df_pais['Home Team Goals'])).sum()
+    empates_total = total_partidas - vitorias_total - derrotas_total
+    
+    gols_marcados_total = df_stats_por_copa['Gols Marcados'].sum()
+    gols_sofridos_total = df_stats_por_copa['Gols Sofridos'].sum()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Média de Gols Marcados/Partida", f"{(gols_marcados_total/total_partidas):.2f}")
+        st.metric("Média de Gols Sofridos/Partida", f"{(gols_sofridos_total/total_partidas):.2f}")
+    
+    with col2:
+        df_resultados = pd.DataFrame({
+            'Resultado': ['Vitórias', 'Empates', 'Derrotas'],
+            'Quantidade': [vitorias_total, empates_total, derrotas_total]
+        })
+        fig_pie_resultados = px.pie(df_resultados, values='Quantidade', names='Resultado', 
+                                    title='Percentual de Resultados em Partidas',
+                                    color='Resultado',
+                                    color_discrete_map={'Vitórias':'green', 'Empates':'yellow', 'Derrotas':'red'})
+        st.plotly_chart(fig_pie_resultados, use_container_width=True)
+    
+    st.markdown("---")
+
+    # --- Análise de Gols por Tempo ---
+    st.subheader("⏱️ Análise de Gols por Tempo")
+    df_pais['Gols Marcados 1T'] = df_pais.apply(lambda row: row['Half-time Home Goals'] if row['Home Team Name'] == pais_selecionado else row['Half-time Away Goals'], axis=1)
+    df_pais['Gols Marcados 2T'] = df_pais.apply(lambda row: (row['Home Team Goals'] - row['Half-time Home Goals']) if row['Home Team Name'] == pais_selecionado else (row['Away Team Goals'] - row['Half-time Away Goals']), axis=1)
+    df_pais['Gols Sofridos 1T'] = df_pais.apply(lambda row: row['Half-time Away Goals'] if row['Home Team Name'] == pais_selecionado else row['Half-time Home Goals'], axis=1)
+    df_pais['Gols Sofridos 2T'] = df_pais.apply(lambda row: (row['Away Team Goals'] - row['Half-time Away Goals']) if row['Home Team Name'] == pais_selecionado else (row['Home Team Goals'] - row['Half-time Home Goals']), axis=1)
+
+    gols_por_tempo_data = {
+        'Tipo': ['Gols Marcados', 'Gols Marcados', 'Gols Sofridos', 'Gols Sofridos'],
+        'Tempo': ['1º Tempo', '2º Tempo', '1º Tempo', '2º Tempo'],
+        'Quantidade': [
+            df_pais['Gols Marcados 1T'].sum(),
+            df_pais['Gols Marcados 2T'].sum(),
+            df_pais['Gols Sofridos 1T'].sum(),
+            df_pais['Gols Sofridos 2T'].sum()
+        ]
+    }
+    df_gols_tempo = pd.DataFrame(gols_por_tempo_data)
+    fig_gols_tempo = px.bar(df_gols_tempo, x='Tempo', y='Quantidade', color='Tipo', barmode='group',
+                            title='Gols Marcados vs. Sofridos por Tempo de Jogo',
+                            labels={'Quantidade': 'Total de Gols', 'Tempo': 'Tempo de Jogo'},
+                            color_discrete_map={'Gols Marcados': 'green', 'Gols Sofridos': 'red'})
+    st.plotly_chart(fig_gols_tempo, use_container_width=True)
+
+    st.markdown("---")
+    
+    # --- Recordes e Goleadas ---
+    st.subheader("🏆 Recordes e Goleadas")
+    df_pais['Diferença Gols'] = df_pais.apply(lambda row: (row['Home Team Goals'] - row['Away Team Goals']) if row['Home Team Name'] == pais_selecionado else (row['Away Team Goals'] - row['Home Team Goals']), axis=1)
+    
+    maior_vitoria = df_pais.loc[df_pais['Diferença Gols'].idxmax()]
+    maior_derrota = df_pais.loc[df_pais['Diferença Gols'].idxmin()]
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        titulo_vitoria = "**Maior Vitória**" if maior_vitoria['Diferença Gols'] > 0 else "**Melhor Resultado**"
+        st.markdown(titulo_vitoria)
+        adversario_v = maior_vitoria['Away Team Name'] if maior_vitoria['Home Team Name'] == pais_selecionado else maior_vitoria['Home Team Name']
+        placar_v = f"{maior_vitoria['Home Team Goals']} x {maior_vitoria['Away Team Goals']}" if maior_vitoria['Home Team Name'] == pais_selecionado else f"{maior_vitoria['Away Team Goals']} x {maior_vitoria['Home Team Goals']}"
+        st.info(f"**{placar_v}** contra **{adversario_v}** ({maior_vitoria['Year']})")
+
+    with col2:
+        st.markdown("**Maior Derrota**")
+        adversario_d = maior_derrota['Away Team Name'] if maior_derrota['Home Team Name'] == pais_selecionado else maior_derrota['Home Team Name']
+        placar_d = f"{maior_derrota['Home Team Goals']} x {maior_derrota['Away Team Goals']}" if maior_derrota['Home Team Name'] == pais_selecionado else f"{maior_derrota['Away Team Goals']} x {maior_derrota['Home Team Goals']}"
+        st.error(f"**{placar_d}** contra **{adversario_d}** ({maior_derrota['Year']})")
+
+    st.markdown("---")
+    
+    # --- Desempenho por Fase ---
+    st.subheader("📋 Desempenho por Fase do Torneio")
+    fases = ['Round of 16', 'Quarter-finals', 'Semi-finals', 'Final']
+    aparicoes_fase = {fase: df_pais[df_pais['Stage'] == fase].shape[0] for fase in fases}
+    
+    df_fases = pd.DataFrame(list(aparicoes_fase.items()), columns=['Fase', 'Aparições'])
+    df_fases['Fase'] = df_fases['Fase'].replace({'Round of 16': 'Oitavas', 'Quarter-finals': 'Quartas', 'Semi-finals': 'Semifinais', 'Final': 'Final'})
+    
+    col1, col2 = st.columns([1,2])
+    with col1:
+        st.dataframe(df_fases)
+    with col2:
+        passou_fase_grupos = df_pais[~df_pais['Stage'].str.contains("Group|First round", na=False)]['Year'].nunique()
+        chegou_final = aparicoes_fase['Final']
+        taxa_conversao = (chegou_final / passou_fase_grupos) if passou_fase_grupos > 0 else 0
+        st.metric("Taxa de Conversão (Final | Pós-Grupos)", f"{taxa_conversao:.2%}")
+        st.caption("Probabilidade de chegar à final, dado que avançou da fase de grupos.")
+        
+    st.markdown("---")
+
+    # --- Confrontos Diretos ---
+    st.subheader("⚔️ Confrontos Diretos (Head-to-Head)")
+    
+    def get_opponent(row):
+        return row['Away Team Name'] if row['Home Team Name'] == pais_selecionado else row['Home Team Name']
+    df_pais['Adversário'] = df_pais.apply(get_opponent, axis=1)
+    
+    maiores_adversarios = df_pais['Adversário'].value_counts().reset_index().head(5)
+    maiores_adversarios.columns = ['Adversário', 'Partidas']
+    
+    # Calcular a porcentagem de vitórias para cada adversário
+    win_percentages = []
+    for adversario in maiores_adversarios['Adversário']:
+        df_confronto = df_pais[df_pais['Adversário'] == adversario]
+        vitorias = ((df_confronto['Home Team Name'] == pais_selecionado) & (df_confronto['Home Team Goals'] > df_confronto['Away Team Goals']) | (df_confronto['Away Team Name'] == pais_selecionado) & (df_confronto['Away Team Goals'] > df_confronto['Home Team Goals'])).sum()
+        partidas = len(df_confronto)
+        percentual = (vitorias / partidas) * 100 if partidas > 0 else 0
+        win_percentages.append(f"{percentual:.1f}%")
+
+    maiores_adversarios['% Vitórias'] = win_percentages
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**Adversários Mais Frequentes**")
+        st.dataframe(maiores_adversarios)
+    
+    with col2:
+        st.markdown("**Maiores 'Fregueses' (Melhor % de Vitória)**")
+        confrontos = []
+        for adversario in df_pais['Adversário'].unique():
+            df_confronto = df_pais[df_pais['Adversário'] == adversario]
+            vitorias = ((df_confronto['Home Team Name'] == pais_selecionado) & (df_confronto['Home Team Goals'] > df_confronto['Away Team Goals']) | (df_confronto['Away Team Name'] == pais_selecionado) & (df_confronto['Away Team Goals'] > df_confronto['Home Team Goals'])).sum()
+            partidas = len(df_confronto)
+            if partidas > 1: # Mínimo de 2 jogos para ser relevante
+                confrontos.append({'Adversário': adversario, '% Vitórias': (vitorias/partidas)*100, 'Partidas': partidas})
+        
+        if confrontos:
+            df_confrontos = pd.DataFrame(confrontos).sort_values(by='% Vitórias', ascending=False).head(5)
+            st.dataframe(df_confrontos)
+        else:
+            st.info("Não há adversários enfrentados mais de uma vez.")
+
+    st.markdown("---")
+
+    # --- Estatísticas Disciplinares ---
+    st.subheader("🟨🟥 Estatísticas Disciplinares")
+    if sigla_pais:
+        df_jogadores_pais = df_players[df_players['Team Initials'] == sigla_pais]
+        total_amarelos_pais = df_jogadores_pais['YellowCards'].sum()
+        total_vermelhos_pais = df_jogadores_pais['RedCards'].sum()
+
+        media_amarelos_partida = total_amarelos_pais / total_partidas if total_partidas > 0 else 0
+        media_vermelhos_partida = total_vermelhos_pais / total_partidas if total_partidas > 0 else 0
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Média de Cartões Amarelos/Partida", f"{media_amarelos_partida:.2f}")
+        with col2:
+            st.metric("Média de Cartões Vermelhos/Partida", f"{media_vermelhos_partida:.2f}")
+    else:
+        st.warning("Não foi possível calcular as estatísticas disciplinares.")
+        
+    st.markdown("---")
+    
     # --- 3. EVOLUÇÃO HISTÓRICA ---
     st.subheader("📈 Evolução Histórica")
     fig_gols_evolucao = px.line(
@@ -414,41 +587,40 @@ if pais_selecionado != "Selecione um país...":
 
     # --- 4. DISTRIBUIÇÃO DE GOLS ---
     st.subheader("🥅 Distribuição de Gols Marcados por Copa")
-    fig_hist_gols = px.histogram(
+    fig_box_gols = px.box(
         df_stats_por_copa,
-        x='Gols Marcados',
+        y='Gols Marcados',
         title=f"Distribuição de Gols Marcados por {pais_selecionado} nas Copas",
         labels={'Gols Marcados': 'Total de Gols em uma Edição'},
-        nbins=10
+        points='all'
     )
-    fig_hist_gols.add_vline(x=media_gols_marcados, line_dash="dot", annotation_text=f"Média: {media_gols_marcados:.2f}")
-    st.plotly_chart(fig_hist_gols, use_container_width=True)
+    fig_box_gols.update_layout(xaxis_title=pais_selecionado)
+    st.plotly_chart(fig_box_gols, use_container_width=True)
 
 
     # --- 5. PRINCIPAIS JOGADORES ---
     st.subheader(f"⭐ Maiores Artilheiros de {pais_selecionado}")
-    
-    # Mapear nome do país para sigla
-    try:
-        sigla_pais = df_matches[df_matches['Home Team Name'] == pais_selecionado]['Home Team Initials'].iloc[0]
-        
+    if sigla_pais:
         df_jogadores_pais = df_players[df_players['Team Initials'] == sigla_pais]
         artilheiros = df_jogadores_pais.groupby('Player Name')['GoalsScored'].sum().sort_values(ascending=False).reset_index().head(10)
-        artilheiros = artilheiros[artilheiros['GoalsScored'] > 0] # Mostrar apenas quem marcou gols
+        artilheiros = artilheiros[artilheiros['GoalsScored'] > 0] 
 
-        fig_artilheiros = px.bar(
-            artilheiros,
-            x='GoalsScored',
-            y='Player Name',
-            orientation='h',
-            title=f'Maiores Artilheiros de {pais_selecionado} em Copas',
-            labels={'Player Name': 'Jogador', 'GoalsScored': 'Total de Gols'},
-            text_auto=True
-        ).update_yaxes(categoryorder='total ascending')
-        st.plotly_chart(fig_artilheiros, use_container_width=True)
-
-    except (IndexError, KeyError):
-        st.warning(f"Não foi possível encontrar dados de artilheiros para {pais_selecionado}.")
+        if not artilheiros.empty:
+            fig_artilheiros = px.bar_polar(
+                artilheiros,
+                r='GoalsScored',
+                theta='Player Name',
+                color='GoalsScored',
+                title=f'Maiores Artilheiros de {pais_selecionado} em Copas',
+                labels={'Player Name': 'Jogador', 'GoalsScored': 'Gols'},
+                color_continuous_scale=px.colors.sequential.Plasma,
+                start_angle=0
+            )
+            st.plotly_chart(fig_artilheiros, use_container_width=True)
+        else:
+            st.warning(f"Não há dados de artilheiros para {pais_selecionado}.")
+    else:
+        st.warning(f"Não foi possível encontrar a sigla para {pais_selecionado} para buscar os artilheiros.")
 
 
     # --- 6. PROBABILIDADES ---
@@ -472,7 +644,6 @@ if pais_selecionado != "Selecione um país...":
     # --- 7. COMPARAÇÃO COM OUTROS PAÍSES ---
     st.subheader("🆚 Comparação de Desempenho")
     
-    # Boxplot comparando gols marcados
     paises_comparacao = ['Brazil', 'Germany', 'Argentina', 'Italy', 'France']
     if pais_selecionado not in paises_comparacao:
         paises_comparacao.append(pais_selecionado)
@@ -482,7 +653,6 @@ if pais_selecionado != "Selecione um país...":
         df_matches['Away Team Name'].isin(paises_comparacao)
     ]
     
-    # Coletar gols por país e por copa
     lista_stats_comparacao = []
     for pais in paises_comparacao:
         df_pais_comp = df_comparacao_raw[(df_comparacao_raw['Home Team Name'] == pais) | (df_comparacao_raw['Away Team Name'] == pais)]
@@ -491,7 +661,7 @@ if pais_selecionado != "Selecione um país...":
             df_ano_comp = df_pais_comp[df_pais_comp['Year'] == ano]
             gols_marcados_comp = int(df_ano_comp[df_ano_comp['Home Team Name'] == pais]['Home Team Goals'].sum() + \
                                      df_ano_comp[df_ano_comp['Away Team Name'] == pais]['Away Team Goals'].sum())
-            lista_stats_comparacao.append({'País': pais, 'Gols Marcados por Copa': gols_marcados_comp})
+            lista_stats_comparacao.append({'País': pais, 'Gols Marcados por Copa': gols_marcados_comp, 'Ano': ano})
 
     df_stats_comparacao = pd.DataFrame(lista_stats_comparacao)
 
@@ -501,7 +671,8 @@ if pais_selecionado != "Selecione um país...":
         y='Gols Marcados por Copa',
         color='País',
         title='Comparativo de Gols Marcados por Copa entre Grandes Seleções',
-        points='all'
+        points='all',
+        hover_data=['Ano']
     )
     fig_boxplot_comparacao.update_layout(showlegend=False)
     st.plotly_chart(fig_boxplot_comparacao, use_container_width=True)
