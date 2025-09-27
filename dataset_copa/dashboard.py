@@ -14,9 +14,18 @@ st.set_page_config(
 try:
     df_cups = pd.read_csv('WorldCups_tratado.csv')
     df_matches = pd.read_csv('WorldCupMatches_tratado.csv')
+    # Adicionando o carregamento do dataset de jogadores
+    df_players = pd.read_csv('WorldCupPlayers_tratado.csv')
 except FileNotFoundError:
-    st.error("Arquivos CSV tratados não encontrados!")
+    st.error("Arquivos CSV tratados não encontrados! Verifique se todos os arquivos .csv estão na pasta correta.")
     st.stop()
+
+# --- PREPARAÇÃO E LIMPEZA ADICIONAL ---
+# Unificar Alemanha Ocidental (FRG) para Alemanha (GER) no df_players
+df_players.replace('FRG', 'GER', inplace=True)
+# Criar a coluna 'Total Goals' no início para uso em múltiplas seções
+df_matches['Total Goals'] = df_matches['Home Team Goals'] + df_matches['Away Team Goals']
+
 
 # --- TÍTULO DO DASHBOARD ---
 st.title("📊 Análise Estatística da Copa do Mundo de Futebol")
@@ -51,10 +60,32 @@ fig_hist_gols = px.histogram(
 fig_hist_gols.update_layout(bargap=0.1)
 st.plotly_chart(fig_hist_gols, use_container_width=True)
 
-with st.expander("Ver análise do Boxplot"):
-    fig_box_gols = px.box(df_cups, y='GoalsScored', title='Boxplot do Total de Gols por Copa', points='all')
-    st.plotly_chart(fig_box_gols, use_container_width=True)
-    st.write("O boxplot nos ajuda a visualizar a mediana (a linha no meio da caixa), os quartis (as bordas da caixa), e possíveis outliers (pontos individuais).")
+# --- GRÁFICO COMBINADO: BOXPLOT + BEESWARM ---
+with st.expander("Ver análise detalhada de Gols por Partida (Boxplot + Beeswarm)"):
+    st.markdown("Este gráfico combina um Boxplot com um Beeswarm (Strip) plot. O Boxplot resume a distribuição de gols, enquanto cada ponto individual representa uma única partida, permitindo uma visualização completa da densidade e dos outliers.")
+    # Preparar dados para o gráfico
+    fases_principais = ['Group 1', 'Group 2', 'Group 3', 'Group 4', 'First round', 
+                      'Round of 16', 'Quarter-finals', 'Semi-finals', 'Final']
+    df_plot_combined = df_matches[df_matches['Stage'].isin(fases_principais)].copy()
+    df_plot_combined['Stage'] = df_plot_combined['Stage'].replace({
+        'Group 1': 'Fase de Grupos', 'Group 2': 'Fase de Grupos', 
+        'Group 3': 'Fase de Grupos', 'Group 4': 'Fase de Grupos',
+        'First round': 'Fase de Grupos'
+    })
+
+    fig_combined = px.box(
+        df_plot_combined,
+        x='Stage',
+        y='Total Goals',
+        color='Stage',
+        points='all', # Este comando adiciona o "beeswarm" sobre o boxplot
+        title='Distribuição de Gols por Fase do Torneio',
+        labels={'Total Goals': 'Total de Gols na Partida', 'Stage': 'Fase do Torneio'},
+        hover_data=['Home Team Name', 'Home Team Goals', 'Away Team Goals', 'Away Team Name', 'Year']
+    )
+    fig_combined.update_layout(showlegend=False)
+    st.plotly_chart(fig_combined, use_container_width=True)
+
 
 st.markdown("---")
 
@@ -69,8 +100,7 @@ st.subheader("Maiores Campeões (Dados Qualitativos)")
 campeoes = df_cups['Winner'].value_counts().reset_index()
 campeoes.columns = ['País', 'Títulos']
 
-# --- ADIÇÃO DAS CORES PERSONALIZADAS ---
-# 1. Criamos nosso dicionário de cores customizado
+# Dicionário de cores customizado
 country_colors = {
     'Brazil': '#FFD700',      # Amarelo Ouro
     'Germany': '#000000',      # Preto
@@ -82,7 +112,7 @@ country_colors = {
     'Spain': '#AA151B'        # Vermelho
 }
 
-# 2. Modificamos o gráfico para usar o dicionário de cores
+# Modificamos o gráfico para usar o dicionário de cores
 fig_bar_campeoes = px.bar(
     campeoes,
     x='País',
@@ -95,7 +125,6 @@ fig_bar_campeoes = px.bar(
 
 # Remove a legenda de cores, pois é redundante
 fig_bar_campeoes.update_layout(showlegend=False)
-
 st.plotly_chart(fig_bar_campeoes, use_container_width=True)
 
 
@@ -111,7 +140,6 @@ fig_line_publico = px.line(
     labels={'Year': 'Ano', 'Attendance': 'Público Total', 'Country': 'País-Sede'}
 )
 st.plotly_chart(fig_line_publico, use_container_width=True)
-
 st.markdown("---")
 
 
@@ -130,8 +158,6 @@ with col1:
 
 with col2:
     st.subheader("Probabilidade de Partidas com Muitos Gols")
-    df_matches['Total Goals'] = df_matches['Home Team Goals'] + df_matches['Away Team Goals']
-    
     prob_mais_de_2_gols = (df_matches['Total Goals'] > 2.5).mean()
     st.metric("P(Total de Gols > 2.5)", f"{prob_mais_de_2_gols:.2%}")
     
@@ -154,3 +180,49 @@ st.write(f"Das {len(df_cups)} Copas do Mundo, em {pais_sede_foi_campeao.sum()} o
 
 with st.expander("Ver os países que venceram em casa"):
     st.dataframe(df_cups[pais_sede_foi_campeao][['Year', 'Country', 'Winner']])
+st.markdown("---")
+
+
+# --- SEÇÃO DE ESTATÍSTICAS DOS JOGADORES ---
+st.header("🏆 Estatísticas dos Jogadores")
+
+# Preparar dados de cartões
+df_players['YellowCards'] = df_players['Event'].str.count('Y')
+df_players['RedCards'] = df_players['Event'].str.count('R')
+
+# Métricas gerais dos jogadores
+total_jogadores = df_players['Player Name'].nunique()
+total_gols_jogadores = df_players['GoalsScored'].sum()
+
+col1, col2 = st.columns(2)
+col1.metric("Total de Jogadores Únicos", f"{total_jogadores:,}".replace(",", "."))
+col2.metric("Total de Gols Registrados (por jogadores)", f"{total_gols_jogadores:,}".replace(",", "."))
+
+# Rankings
+col1, col2 = st.columns(2)
+with col1:
+    st.subheader("Maiores Artilheiros de Todas as Copas")
+    # Agrupamos por nome, somamos os gols e pegamos a primeira nacionalidade encontrada
+    top_scorers = df_players.groupby('Player Name').agg(
+        Nacionalidade=('Team Initials', 'first'),
+        Gols=('GoalsScored', 'sum')
+    ).sort_values(by='Gols', ascending=False).reset_index().head(10)
+    
+    # Reordenamos as colunas para melhor visualização
+    top_scorers = top_scorers[['Player Name', 'Nacionalidade', 'Gols']]
+    top_scorers.rename(columns={'Player Name': 'Jogador'}, inplace=True)
+    st.dataframe(top_scorers)
+
+with col2:
+    st.subheader("Jogadores com Mais Cartões Amarelos")
+    # Agrupamos por nome, somamos os cartões e pegamos a primeira nacionalidade
+    top_yellow_cards = df_players.groupby('Player Name').agg(
+        Nacionalidade=('Team Initials', 'first'),
+        YellowCards=('YellowCards', 'sum')
+    ).sort_values(by='YellowCards', ascending=False).reset_index().head(10)
+    
+    # Reordenamos as colunas e renomeamos para a exibição
+    top_yellow_cards = top_yellow_cards[['Player Name', 'Nacionalidade', 'YellowCards']]
+    top_yellow_cards.rename(columns={'Player Name': 'Jogador', 'YellowCards': 'Cartões Amarelos'}, inplace=True)
+    st.dataframe(top_yellow_cards)
+
