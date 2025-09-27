@@ -10,6 +10,19 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- CUSTOMIZAÇÃO DO TEMA PARA FUNDO BRANCO ---
+st.markdown(
+    """
+    <style>
+    .main {
+        background-color: #FFFFFF;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
 # --- CARREGANDO OS DADOS TRATADOS ---
 try:
     df_cups = pd.read_csv('WorldCups_tratado.csv')
@@ -23,8 +36,11 @@ except FileNotFoundError:
 # --- PREPARAÇÃO E LIMPEZA ADICIONAL ---
 # Unificar Alemanha Ocidental (FRG) para Alemanha (GER) no df_players
 df_players.replace('FRG', 'GER', inplace=True)
-# Criar a coluna 'Total Goals' no início para uso em múltiplas seções
+# Criar colunas de análise no início para uso em múltiplas seções
 df_matches['Total Goals'] = df_matches['Home Team Goals'] + df_matches['Away Team Goals']
+df_players['Shirt Number'] = pd.to_numeric(df_players['Shirt Number'], errors='coerce')
+df_players['YellowCards'] = df_players['Event'].str.count('Y')
+df_players['RedCards'] = df_players['Event'].str.count('R')
 
 
 # --- TÍTULO DO DASHBOARD ---
@@ -35,7 +51,7 @@ st.markdown("---")
 
 # --- SEÇÃO 1: MÉDIA, MEDIANA E DESVIO PADRÃO ---
 st.header("Análise Descritiva: Gols Marcados por Copa")
-st.markdown("Analisando a distribuição do total de gols em cada edição do torneio.")
+st.markdown("Analisando a distribuição e a evolução do total de gols em cada edição do torneio.")
 
 # Cálculos
 total_gols_por_copa = df_cups['GoalsScored']
@@ -49,40 +65,62 @@ col1.metric("Média de Gols por Copa", f"{media_gols:.2f}")
 col2.metric("Mediana de Gols por Copa", f"{mediana_gols:.0f}")
 col3.metric("Desvio Padrão", f"{desvio_padrao_gols:.2f}")
 
-# Gráfico: Histograma com Plotly
-fig_hist_gols = px.histogram(
+# Gráfico: Gráfico de Barras da Evolução de Gols (SUBSTITUIÇÃO DO HISTOGRAMA)
+st.subheader("Evolução do Total de Gols Marcados por Edição")
+fig_bar_gols_ano = px.bar(
     df_cups,
-    x='GoalsScored',
-    nbins=10,
-    title='Distribuição do Total de Gols por Edição da Copa do Mundo',
-    labels={'GoalsScored': 'Total de Gols Marcados'}
+    x='Year',
+    y='GoalsScored',
+    title='Total de Gols Marcados em Cada Copa do Mundo',
+    labels={'GoalsScored': 'Total de Gols Marcados', 'Year': 'Ano da Copa'},
+    text_auto=True
 )
-fig_hist_gols.update_layout(bargap=0.1)
-st.plotly_chart(fig_hist_gols, use_container_width=True)
+fig_bar_gols_ano.update_traces(textposition='outside')
+st.plotly_chart(fig_bar_gols_ano, use_container_width=True)
+st.markdown("Este gráfico mostra a variação no total de gols marcados em cada Copa do Mundo, permitindo observar tendências ao longo do tempo, como os picos em edições específicas.")
+
 
 # --- GRÁFICO COMBINADO: BOXPLOT + BEESWARM ---
 with st.expander("Ver análise detalhada de Gols por Partida (Boxplot + Beeswarm)"):
     st.markdown("Este gráfico combina um Boxplot com um Beeswarm (Strip) plot. O Boxplot resume a distribuição de gols, enquanto cada ponto individual representa uma única partida, permitindo uma visualização completa da densidade e dos outliers.")
+    
     # Preparar dados para o gráfico
     fases_principais = ['Group 1', 'Group 2', 'Group 3', 'Group 4', 'First round', 
                       'Round of 16', 'Quarter-finals', 'Semi-finals', 'Final']
     df_plot_combined = df_matches[df_matches['Stage'].isin(fases_principais)].copy()
+    
+    # Padronizar nomes das fases para português
     df_plot_combined['Stage'] = df_plot_combined['Stage'].replace({
         'Group 1': 'Fase de Grupos', 'Group 2': 'Fase de Grupos', 
         'Group 3': 'Fase de Grupos', 'Group 4': 'Fase de Grupos',
-        'First round': 'Fase de Grupos'
+        'First round': 'Fase de Grupos',
+        'Round of 16': 'Oitavas de Final',
+        'Quarter-finals': 'Quartas de Final',
+        'Semi-finals': 'Semifinais'
+        # 'Final' já está correto
     })
+
+    # Definir a ordem cronológica das fases para o eixo X
+    ordem_fases = ['Fase de Grupos', 'Oitavas de Final', 'Quartas de Final', 'Semifinais', 'Final']
 
     fig_combined = px.box(
         df_plot_combined,
         x='Stage',
         y='Total Goals',
         color='Stage',
-        points='all', # Este comando adiciona o "beeswarm" sobre o boxplot
+        points='all', # Adiciona os pontos (beeswarm) sobre o boxplot
         title='Distribuição de Gols por Fase do Torneio',
         labels={'Total Goals': 'Total de Gols na Partida', 'Stage': 'Fase do Torneio'},
-        hover_data=['Home Team Name', 'Home Team Goals', 'Away Team Goals', 'Away Team Name', 'Year']
+        hover_data=['Home Team Name', 'Home Team Goals', 'Away Team Goals', 'Away Team Name', 'Year'],
+        category_orders={'Stage': ordem_fases} # Aplica a ordem correta no eixo X
     )
+    
+    # Adicionar linha da média geral para referência
+    media_geral_gols = df_matches['Total Goals'].mean()
+    fig_combined.add_hline(y=media_geral_gols, line_dash="dot", 
+                           annotation_text=f"Média Geral: {media_geral_gols:.2f}", 
+                           annotation_position="bottom right")
+
     fig_combined.update_layout(showlegend=False)
     st.plotly_chart(fig_combined, use_container_width=True)
 
@@ -164,6 +202,43 @@ with col2:
     prob_zero_a_zero = (df_matches['Total Goals'] == 0).mean()
     st.metric("P(Placar = 0x0)", f"{prob_zero_a_zero:.2%}")
 
+# Análise de Probabilidade por Posição
+st.subheader("Probabilidade de Eventos por Posição (baseado na numeração da camisa)")
+
+# Definir números de camisa para cada posição
+atacantes_numeros = [7, 8, 9, 10, 11]
+defensores_numeros = [2, 3, 4, 5, 6]
+
+# Filtrar jogadores com número de camisa válido
+jogadores_validos = df_players.dropna(subset=['Shirt Number'])
+
+# Separar em dataframes de atacantes e defensores
+df_atacantes = jogadores_validos[jogadores_validos['Shirt Number'].isin(atacantes_numeros)]
+df_defensores = jogadores_validos[jogadores_validos['Shirt Number'].isin(defensores_numeros)]
+
+# Calcular Probabilidades de Gol
+total_gols_com_numeracao = jogadores_validos['GoalsScored'].sum()
+gols_atacantes = df_atacantes['GoalsScored'].sum()
+gols_defensores = df_defensores['GoalsScored'].sum()
+prob_gol_atacante = (gols_atacantes / total_gols_com_numeracao) if total_gols_com_numeracao > 0 else 0
+prob_gol_defensor = (gols_defensores / total_gols_com_numeracao) if total_gols_com_numeracao > 0 else 0
+
+# Calcular Probabilidades de Cartão Amarelo
+# A probabilidade aqui é o total de cartões dividido pelo total de "oportunidades" (jogadores em campo)
+total_cartoes_atacantes = df_atacantes['YellowCards'].sum()
+total_cartoes_defensores = df_defensores['YellowCards'].sum()
+prob_cartao_atacante = (total_cartoes_atacantes / len(df_atacantes)) if len(df_atacantes) > 0 else 0
+prob_cartao_defensor = (total_cartoes_defensores / len(df_defensores)) if len(df_defensores) > 0 else 0
+
+col1, col2 = st.columns(2)
+with col1:
+    st.metric("P(Gol | Camisa de Atacante)", f"{prob_gol_atacante:.2%}")
+    st.metric("P(Cartão Amarelo | Camisa de Atacante)", f"{prob_cartao_atacante:.2%}")
+with col2:
+    st.metric("P(Gol | Camisa de Defensor)", f"{prob_gol_defensor:.2%}")
+    st.metric("P(Cartão Amarelo | Camisa de Defensor)", f"{prob_cartao_defensor:.2%}")
+
+
 st.markdown("---")
 
 # --- SEÇÃO 4: PROBABILIDADE CONDICIONAL ---
@@ -183,12 +258,36 @@ with st.expander("Ver os países que venceram em casa"):
 st.markdown("---")
 
 
+# --- NOVA SEÇÃO: HEATMAP DE CORRELAÇÃO ---
+st.header("🔥 Heatmap de Correlação entre Variáveis do Torneio")
+st.markdown("Este mapa de calor mostra a correlação de Pearson entre as principais variáveis numéricas das Copas. Valores próximos de 1 (vermelho escuro) indicam uma forte correlação positiva, enquanto valores próximos de -1 indicam uma forte correlação negativa. Valores próximos de 0 (cores claras) sugerem uma correlação fraca.")
+
+# Selecionar e renomear as colunas para o heatmap
+df_heatmap = df_cups[['GoalsScored', 'QualifiedTeams', 'MatchesPlayed', 'Attendance']].copy()
+df_heatmap.rename(columns={
+    'GoalsScored': 'Gols Marcados',
+    'QualifiedTeams': 'Seleções Qualificadas',
+    'MatchesPlayed': 'Partidas Jogadas',
+    'Attendance': 'Público Total'
+}, inplace=True)
+
+# Calcular a matriz de correlação
+corr = df_heatmap.corr()
+
+# Criar o heatmap com Plotly
+fig_heatmap = px.imshow(
+    corr,
+    text_auto=True,
+    aspect="auto",
+    color_continuous_scale='RdBu_r', # Esquema de cores: Vermelho (positivo), Azul (negativo)
+    title="Correlação entre Variáveis Numéricas das Copas"
+)
+st.plotly_chart(fig_heatmap, use_container_width=True)
+st.markdown("---")
+
+
 # --- SEÇÃO DE ESTATÍSTICAS DOS JOGADORES ---
 st.header("🏆 Estatísticas dos Jogadores")
-
-# Preparar dados de cartões
-df_players['YellowCards'] = df_players['Event'].str.count('Y')
-df_players['RedCards'] = df_players['Event'].str.count('R')
 
 # Métricas gerais dos jogadores
 total_jogadores = df_players['Player Name'].nunique()
