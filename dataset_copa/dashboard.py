@@ -38,6 +38,7 @@ df_players.replace('FRG', 'GER', inplace=True)
 # Criar colunas de análise no início para uso em múltiplas seções
 df_matches['Total Goals'] = df_matches['Home Team Goals'] + df_matches['Away Team Goals']
 df_players['Shirt Number'] = pd.to_numeric(df_players['Shirt Number'], errors='coerce')
+df_players['GoalsScored'] = pd.to_numeric(df_players['GoalsScored'], errors='coerce').fillna(0)
 df_players['YellowCards'] = df_players['Event'].str.count('Y')
 df_players['RedCards'] = df_players['Event'].str.count('R')
 
@@ -294,7 +295,7 @@ total_gols_jogadores = df_players['GoalsScored'].sum()
 
 col1, col2 = st.columns(2)
 col1.metric("Total de Jogadores Únicos", f"{total_jogadores:,}".replace(",", "."))
-col2.metric("Total de Gols Registrados (por jogadores)", f"{total_gols_jogadores:,}".replace(",", "."))
+col2.metric("Total de Gols Registrados (por jogadores)", f"{int(total_gols_jogadores):,}".replace(",", "."))
 
 # Rankings
 col1, col2 = st.columns(2)
@@ -323,6 +324,35 @@ with col2:
     top_yellow_cards = top_yellow_cards[['Player Name', 'Nacionalidade', 'YellowCards']]
     top_yellow_cards.rename(columns={'Player Name': 'Jogador', 'YellowCards': 'Cartões Amarelos'}, inplace=True)
     st.dataframe(top_yellow_cards)
+st.markdown("---")
+
+
+# --- NOVA SEÇÃO: GOLS POR NÚMERO DE CAMISA (SUBSTITUÍDO) ---
+st.header("👕 Análise de Gols por Número da Camisa")
+st.markdown("Qual número de camisa marcou mais gols na história das Copas? Este gráfico de barras mostra o total de gols agregados por cada número, excluindo a camisa 0.")
+
+# 1. Preparar os dados
+# Agrupar por número da camisa e somar os gols
+gols_por_camisa = df_players.groupby('Shirt Number')['GoalsScored'].sum().reset_index()
+
+# 2. Filtrar o número da camisa '0' e garantir que não haja NaN
+gols_por_camisa_filtrado = gols_por_camisa[gols_por_camisa['Shirt Number'] != 0].dropna()
+
+# 3. Criar o gráfico de barras
+fig_bar_camisa_gols = px.bar(
+    gols_por_camisa_filtrado,
+    x='Shirt Number',
+    y='GoalsScored',
+    title='Total de Gols Marcados por Número de Camisa',
+    labels={'Shirt Number': 'Número da Camisa', 'GoalsScored': 'Total de Gols Marcados'},
+    text_auto=True
+)
+
+# Ordena as barras do maior para o menor para melhor visualização
+fig_bar_camisa_gols.update_xaxes(type='category', categoryorder='total descending')
+fig_bar_camisa_gols.update_traces(textposition='outside')
+st.plotly_chart(fig_bar_camisa_gols, use_container_width=True)
+st.markdown("O gráfico permite identificar facilmente os números de camisa que, historicamente, concentram a maior quantidade de gols, como as camisas 9, 10 e 11, tradicionalmente associadas a atacantes.")
 st.markdown("---")
 
 
@@ -675,4 +705,3 @@ if pais_selecionado != "Selecione um país...":
     )
     fig_boxplot_comparacao.update_layout(showlegend=False)
     st.plotly_chart(fig_boxplot_comparacao, use_container_width=True)
-
