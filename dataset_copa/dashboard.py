@@ -32,7 +32,10 @@ except FileNotFoundError:
     st.error("Arquivos CSV tratados não encontrados! Verifique se todos os arquivos .csv estão na pasta correta.")
     st.stop()
 
-# --- PREPARAÇÃO E LIMPEZA ADICIONAL ---
+# --- LIMPEZA ADICIONAL ---
+# Pelé 
+df_players['Player Name'] = df_players['Player Name'].str.replace('�', 'É', regex=False)
+
 # Unificar Alemanha Ocidental (FRG) para Alemanha (GER) no df_players
 df_players.replace('FRG', 'GER', inplace=True)
 # Criar colunas de análise no início para uso em múltiplas seções
@@ -462,9 +465,9 @@ if pais_selecionado != "Selecione um país...":
             'Quantidade': [vitorias_total, empates_total, derrotas_total]
         })
         fig_pie_resultados = px.pie(df_resultados, values='Quantidade', names='Resultado', 
-                                    title='Percentual de Resultados em Partidas',
-                                    color='Resultado',
-                                    color_discrete_map={'Vitórias':'green', 'Empates':'yellow', 'Derrotas':'red'})
+                                     title='Percentual de Resultados em Partidas',
+                                     color='Resultado',
+                                     color_discrete_map={'Vitórias':'green', 'Empates':'yellow', 'Derrotas':'red'})
         st.plotly_chart(fig_pie_resultados, use_container_width=True)
     
     st.markdown("---")
@@ -689,7 +692,7 @@ if pais_selecionado != "Selecione um país...":
         for ano in anos_participacao_comp:
             df_ano_comp = df_pais_comp[df_pais_comp['Year'] == ano]
             gols_marcados_comp = int(df_ano_comp[df_ano_comp['Home Team Name'] == pais]['Home Team Goals'].sum() + \
-                                     df_ano_comp[df_ano_comp['Away Team Name'] == pais]['Away Team Goals'].sum())
+                                      df_ano_comp[df_ano_comp['Away Team Name'] == pais]['Away Team Goals'].sum())
             lista_stats_comparacao.append({'País': pais, 'Gols Marcados por Copa': gols_marcados_comp, 'Ano': ano})
 
     df_stats_comparacao = pd.DataFrame(lista_stats_comparacao)
