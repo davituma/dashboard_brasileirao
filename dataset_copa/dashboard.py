@@ -282,7 +282,7 @@ fig_heatmap = px.imshow(
     corr,
     text_auto=True,
     aspect="auto",
-    color_continuous_scale='RdBu_r', # Esquema de cores: Vermelho (positivo), Azul (negativo)
+    color_continuous_scale='YlOrRd', # Esquema de cores: Vermelho (positivo), Azul (negativo)
     title="Correlação entre Variáveis Numéricas das Copas"
 )
 st.plotly_chart(fig_heatmap, use_container_width=True)
